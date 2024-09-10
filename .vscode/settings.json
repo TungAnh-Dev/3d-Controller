@@ -51,5 +51,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Simple-Character-Controller-in-Unity.sln"
+    "dotnet.defaultSolution": "3d-Controller.sln"
 }
