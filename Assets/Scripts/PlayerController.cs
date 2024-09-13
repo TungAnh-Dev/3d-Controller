@@ -1,14 +1,22 @@
 using System;
 using System.Collections;
-using UnityEditor.UIElements;
+using CatInput;
 using UnityEngine;
 using UnityEngine.InputSystem;
+
+[Serializable] 
+public class PlayerData
+{
+	public int level;
+	public int currentExperience;
+}
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
 {
+	public PlayerData playerData;
 	#region Variables: Movement
-
+	[SerializeField] private InputReader inputReader;
 	private Vector2 playerInput;
 	private CharacterController _characterController;
 	private Vector3 _direction;
@@ -20,30 +28,55 @@ public class PlayerController : MonoBehaviour
 	#endregion
 	#region Variables: Rotation
 
+	[Header("Rotation")]
 	[SerializeField] private float rotationSpeed = 500f;
 	private Camera _mainCamera;
 
 	#endregion
 	#region Variables: Gravity
 
-	private float _gravity = -9.81f;
+	[Header("Gravity")]
 	[SerializeField] private float gravityMultiplier = 3.0f;
+	private float _gravity = -9.81f;
 	private float _velocity;
 
 	#endregion
 	#region Variables: Jumping
-
+	[Header("Jumping")]
 	[SerializeField] private float jumpPower;
-	private int _numberOfJumps;
 	[SerializeField] private int maxNumberOfJumps = 2;
+	private int _numberOfJumps;
 
 	#endregion
+
+	[Header("Attack")]
+	[SerializeField] AttackArea attackArea;
+	[SerializeField] private float _attackReloadDuration = 1f;
+	[SerializeField] private float damageAttack;
+	[Range(0, 100)]
+	[SerializeField] private float criticalPercentage = 70;
+	[Range(0, 1)]
+	[SerializeField] private float criticalRate = 0.4f;
+	bool isAttacking = false;
+
+	public float GetDamage()
+	{
+		if(UnityEngine.Random.Range(0, 100) <= 70)
+		{
+			Debug.Log($"critical {damageAttack + (criticalRate * damageAttack)}");
+			return damageAttack + (criticalRate * damageAttack);
+		}
+
+		return damageAttack;
+	}
+
 
 	public LayerMask wallLayer;
 
 	StateMachine stateMachine = new StateMachine();
-	
-	private void Awake()
+
+
+    private void Awake()
 	{
 		_characterController = GetComponent<CharacterController>();
 		_mainCamera = Camera.main;
@@ -51,8 +84,15 @@ public class PlayerController : MonoBehaviour
 
 	void Start()
 	{
+		AddEventInputReader();
+
 		stateMachine.ChangeState(IdleState);
 		_numberOfJumps = 0;
+	}
+
+	void OnDisable()
+	{
+		RemoveEventInputReader();
 	}
 
 	private void Update()
@@ -67,7 +107,53 @@ public class PlayerController : MonoBehaviour
 		
 	}
 
-	private void CheckWall()
+	private void AddEventInputReader()
+	{
+		inputReader.MoveEvent += HandleMove;
+		inputReader.JumpEvent += HandleJump;
+		inputReader.FireEvent += HandleFire;
+	}
+
+	private void RemoveEventInputReader()
+	{
+		inputReader.MoveEvent -= HandleMove;
+		inputReader.JumpEvent -= HandleJump;
+		inputReader.FireEvent -= HandleFire;
+	}
+
+
+
+    private void HandleFire()
+	{
+		if (isAttacking) return;
+
+		Debug.Log($"Attack");
+		isAttacking = true;
+		attackArea.Active();
+
+		StartCoroutine(AttackCooldown());
+	}
+
+	private IEnumerator AttackCooldown()
+	{
+		// Wait for the attack reload duration (in seconds)
+		yield return new WaitForSeconds(_attackReloadDuration);
+
+		isAttacking = false;
+		attackArea.Disable();
+	}
+
+    private void HandleJump()
+    {
+        if (!IsGrounded() && _numberOfJumps >= maxNumberOfJumps) return;
+		if (_numberOfJumps == 0) StartCoroutine(WaitForLanding());
+
+		_numberOfJumps++;
+
+		stateMachine.ChangeState(JumpState);
+    }
+
+    private void CheckWall()
 	{
 		// Raycast parameters
 		float rayDistance = 1.0f; 
@@ -124,38 +210,18 @@ public class PlayerController : MonoBehaviour
 		_characterController.Move(_direction * movement.currentSpeed * Time.deltaTime);
 	}
 
-	public void Move(InputAction.CallbackContext context)
+	private void HandleMove(Vector2 dir)
 	{
-		playerInput = context.ReadValue<Vector2>();
+		playerInput = dir;
 
 		if(stateMachine.IsState(ClimbState))
 		{
-			_direction = new Vector3(playerInput.x, playerInput.y, 0f);
+			_direction = new Vector3(dir.x, dir.y, 0f);
 		}
 		else
 		{
-			_direction = new Vector3(playerInput.x, 0.0f, playerInput.y);
+			_direction = new Vector3(dir.x, 0.0f, dir.y);
 		}
-		
-	}
-
-	public void Jump(InputAction.CallbackContext context)
-	{
-		if (!context.performed) return;
-		if (!IsGrounded() && _numberOfJumps >= maxNumberOfJumps) return;
-		if (_numberOfJumps == 0) StartCoroutine(WaitForLanding());
-
-		_numberOfJumps++;
-
-		stateMachine.ChangeState(JumpState);
-		
-	}
-
-	public void Fire(InputAction.CallbackContext context)
-	{
-		if (!context.performed) return;
-		
-		//TODO:Change attack, box attack
 	}
 
 	private void ApplyJumping()

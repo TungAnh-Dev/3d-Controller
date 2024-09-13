@@ -4,10 +4,36 @@ using UnityEngine;
 
 public class AttackArea : MonoBehaviour
 {
-    private void OnTriggerEnter(Collider other) {
-        if(other.CompareTag("Enemy"))
+    [SerializeField] PlayerController playerController;
+    void Start()
+    {
+        Disable();
+    }
+
+    private void OnTriggerEnter(Collider other) 
+    {
+
+        IHit hit = other.GetComponent<IHit>();
+
+        if(hit == null) return;
+
+        if(playerController.playerData.level >= hit.GetCurrentLevel())
         {
-            Debug.Log($"99999");
+            hit.OnHit(playerController.GetDamage());
         }
+        else
+        {
+            //TODO: Show level required
+        }
+    }
+
+    public void Active()
+    {
+        gameObject.SetActive(true);
+    }
+
+    public void Disable()
+    {
+        gameObject.SetActive(false);
     }
 }
